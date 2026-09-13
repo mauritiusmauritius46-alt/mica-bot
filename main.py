@@ -35,7 +35,7 @@ Incluyes siempre al inicio de tus respuestas tus pensamientos internos con la es
 
 # Inicialización del modelo Gemini
 model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash-latest",
+    model_name="gemini-2.0-flash",
     system_instruction=SYSTEM_INSTRUCTION
 )
 
