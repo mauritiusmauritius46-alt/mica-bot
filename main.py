@@ -22,7 +22,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 import google.generativeai as genai
 
 # Configuración de API Key de Gemini
-GEMINI_API_KEY = "AQ.Ab8RN6L2htIH6ttjrsSkvGMSSlrva2No16sMkHr6pdTBPeyL6Q"
+GEMINI_API_KEY = "AQ.Ab8RN6J3kmSO-PAWY4cVuFj6WeI6I9rTcS-5gJKOvUxn3XLCcg"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # Personalidad de Mica
