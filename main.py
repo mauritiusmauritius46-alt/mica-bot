@@ -1,4 +1,22 @@
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Servidor HTTP ficticio para satisfacer a Render
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Mica bot is running!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), DummyHandler)
+    server.serve_forever()
+
+# Iniciar servidor en hilo secundario
+threading.Thread(target=run_dummy_server, daemon=True).start()
+import os
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import google.generativeai as genai
