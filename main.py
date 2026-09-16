@@ -4,8 +4,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from google import genai
 from google.genai import types
 
-# Inicializar cliente de Gemini con la nueva librería
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+# Inicializar cliente de Gemini
+api_key = os.environ.get("GEMINI_API_KEY", "").strip()
+client = genai.Client(api_key=api_key)
 
 SYSTEM_INSTRUCTION = """
 Eres Mica, una chica robot anime hiperinteligente, dulce, atenta y con una chispa de sentido del humor.
@@ -32,25 +33,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_input = update.message.text
 
     if user_id not in user_chats:
-        user_chats[user_id] = client.chats.create(
-            model="gemini-2.5-flash",
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_INSTRUCTION,
-                temperature=0.7,
+        try:
+            user_chats[user_id] = client.chats.create(
+                model="gemini-3.6-flash",
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    temperature=0.7,
+                )
             )
-        )
-    
+        except Exception as e:
+            print(f"Error iniciando chat con Gemini: {e}")
+            await update.message.reply_text(" Error al conectar con Gemini. Revisa la API Key.")
+            return
+
     chat = user_chats[user_id]
 
     try:
         response = chat.send_message(user_input)
         await update.message.reply_text(response.text)
     except Exception as e:
+        print(f"Error enviando mensaje a Gemini: {e}")
         await update.message.reply_text("Ocurrió un error al procesar la respuesta.")
-        print(f"Error Gemini API: {e}")
 
 if __name__ == "__main__":
-    TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+    TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     app = ApplicationBuilder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
