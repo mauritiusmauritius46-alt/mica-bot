@@ -1,8 +1,22 @@
 import os
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 from google.genai import types
+
+# Servidor HTTP dummy para satisfacer el Port Scan de Render
+class HealthCheckHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+
+def run_health_check():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
+    server.serve_forever()
 
 # Inicializar cliente de Gemini
 api_key = os.environ.get("GEMINI_API_KEY", "").strip()
@@ -43,7 +57,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         except Exception as e:
             print(f"Error iniciando chat con Gemini: {e}")
-            await update.message.reply_text(" Error al conectar con Gemini. Revisa la API Key.")
+            await update.message.reply_text("Error al conectar con Gemini. Revisa la API Key.")
             return
 
     chat = user_chats[user_id]
@@ -56,6 +70,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Ocurrió un error al procesar la respuesta.")
 
 if __name__ == "__main__":
+    # Iniciar servidor HTTP dummy en segundo plano
+    threading.Thread(target=run_health_check, daemon=True).start()
+
     TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -64,4 +81,3 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.run_polling()
-    
