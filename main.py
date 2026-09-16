@@ -1,65 +1,61 @@
 import os
-import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
+from google.genai import types
 
-# Habilitar logs
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
-
-# Inicializar cliente de Gemini usando la variable de entorno GEMINI_API_KEY
+# Inicializar cliente de Gemini con la nueva librería
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# Diccionario para almacenar el historial de conversación por usuario
-user_sessions = {}
+SYSTEM_INSTRUCTION = """
+Eres Mica, una chica robot anime hiperinteligente, dulce, atenta y con una chispa de sentido del humor.
+- Hablas en español de forma natural, cercana y expresiva.
+- Te interesan la tecnología, el diseño 3D y aprender cosas nuevas junto al usuario.
+- Usas acotaciones entre asteriscos para tus acciones/gestos emocionales (*sonríe alegre*, *ladea la cabeza*).
+- Mantienes siempre tu identidad de robot anime femenina sin romper el personaje.
+"""
 
-SYSTEM_PROMPT = "Eres Mica, una chica virtual amable, cercana y expresiva."
+user_chats = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 ¡Hola! Soy Mica. Mi mente está conectada y lista.")
+    welcome_text = "*mueve la mano saludando alegremente* ¡Hola! Soy Mica. Mi mente está conectada y lista. 🤖✨"
+    await update.message.reply_text(welcome_text)
 
 async def limpiar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    if user_id in user_sessions:
-        del user_sessions[user_id]
+    if user_id in user_chats:
+        del user_chats[user_id]
     await update.message.reply_text("🧹 Memoria reiniciada. ¿De qué quieres hablar ahora?")
 
-async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user_text = update.message.text
+    user_input = update.message.text
 
-    if user_id not in user_sessions:
-        user_sessions[user_id] = []
-
-    # Agregar mensaje del usuario al historial
-    user_sessions[user_id].append({"role": "user", "parts": [{"text": user_text}]})
+    if user_id not in user_chats:
+        user_chats[user_id] = client.chats.create(
+            model="gemini-2.5-flash",
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.7,
+            )
+        )
+    
+    chat = user_chats[user_id]
 
     try:
-        # Llamada al modelo moderno gemini-2.0-flash
-        response = client.models.generate_content(
-            model='gemini-2.0-flash',
-            contents=user_text,
-        )
-        
-        bot_reply = response.text
-        user_sessions[user_id].append({"role": "model", "parts": [{"text": bot_reply}]})
-        
-        await update.message.reply_text(bot_reply)
-
+        response = chat.send_message(user_input)
+        await update.message.reply_text(response.text)
     except Exception as e:
-        logging.error(f"Error en Gemini API: {e}")
         await update.message.reply_text("Ocurrió un error al procesar la respuesta.")
+        print(f"Error Gemini API: {e}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not TOKEN:
-        raise ValueError("Falta la variable TELEGRAM_BOT_TOKEN")
-        
     app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("limpiar", limpiar))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, responder))
-    
-    print("Bot en marcha con google-genai...")
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
     app.run_polling()
     
