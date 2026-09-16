@@ -57,7 +57,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user_id not in user_chats:
         try:
             user_chats[user_id] = client.chats.create(
-                model="gemini-3.6-flash",
+                model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
                     temperature=0.8,
@@ -77,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error enviando mensaje, reintentando crear sesión: {e}")
         try:
             user_chats[user_id] = client.chats.create(
-                model="gemini-3.6-flash",
+                model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
                     temperature=0.8,
