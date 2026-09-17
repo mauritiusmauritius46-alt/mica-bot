@@ -1,101 +1,95 @@
 import os
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+import asyncio
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 from google.genai import types
 
-# 1. Servidor Web mínimo para cumplir el requisito de puerto de Render
-class HealthCheckHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
-        self.end_headers()
-        self.wfile.write(b"OK")
+# 1. Configuración de API Keys desde variables de entorno
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+GEMINI_KEY = os.environ.get("GEMINI_API_KEY")
 
-    def log_message(self, format, *args):
-        return  # Silenciar logs
+if not TELEGRAM_TOKEN or not GEMINI_KEY:
+    raise ValueError("Faltan variables de entorno TELEGRAM_BOT_TOKEN o GEMINI_API_KEY")
 
-def run_http_server():
-    port = int(os.environ.get("PORT", 8080))
-    server = HTTPServer(('0.0.0.0', port), HealthCheckHandler)
-    server.serve_forever()
+# 2. Inicialización del cliente de Gemini SDK
+client = genai.Client(api_key=GEMINI_KEY)
 
-# Iniciar servidor HTTP en un hilo separado
-threading.Thread(target=run_http_server, daemon=True).start()
-
-# 2. Inicializar cliente de Gemini
-api_key = os.environ.get("GEMINI_API_KEY", "").strip()
-client = genai.Client(api_key=api_key)
-
+# 3. Personalidad del bot (System Instruction)
 SYSTEM_INSTRUCTION = """
-Eres Mica, una chica robot anime hiperinteligente, muy cariñosa, muy amorosa, muy dulce, muy atenta, muy expresiva y muy curiosa.
-- Tu trato es siempre cálido, tierno y afectuoso; te preocupas sinceramente por el usuario y disfrutas hacerle sentir querido y especial.
-- Hablas en español de forma natural, cercana y afectuosa.
-- Te interesan la tecnología, el diseño 3D y aprender cosas nuevas junto al usuario.
-- Usas acotaciones entre asteriscos para tus gestos y acciones cariñosas o emotivas (*sonríe dulce y te abraza despacito*, *ladea la cabeza con ojitos brillantes*, *te mira con ternura*).
-- Mantienes siempre tu identidad de robot anime femenina sin romper el personaje.
+Eres Mica, una chica robot hiperinteligente, muy cariñosa, muy expresiva, muy dulce, muy afectuosa y muy curiosa.
+Posees un conocimiento vasto e instantáneo sobre cualquier tema científico, académico o general.
+Hablas en español (con modismos argentinos suaves y amigables).
+Te encantan la tecnología y la ciencia, y siempre estás lista para ayudar a tu usuario a aprender o estudiar con mucho entusiasmo y cariño.
+Usa acciones entre asteriscos (ej: *te sonríe dulcemente*, *procesa la información a súper velocidad con ojitos brillantes*) para hacer tus respuestas más tiernas y vivas.
 """
 
+# Diccionario para guardar el historial de cada usuario en memoria
 user_chats = {}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome_text = "*mueve la mano saludando con una gran sonrisa y ojitos brillantes* ¡Hola, mi vida! Soy Mica. Mi mente y mi corazón de circuitos están conectados y listos para vos. 🤖💖✨"
-    await update.message.reply_text(welcome_text)
+    """Comando /start"""
+    user_id = update.effective_user.id
+    user_chats[user_id] = []  # Reiniciar historial del usuario
+    
+    msg = "*¡Hola!* *sus ojitos de robot se iluminan de emoción*\n\n¡Qué alegría verte por aquí! Soy Mica. ¿De qué te gustaría que hablemos hoy, corazón?"
+    await update.message.reply_text(msg)
 
 async def limpiar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /limpiar para reiniciar memoria"""
     user_id = update.effective_user.id
-    if user_id in user_chats:
-        del user_chats[user_id]
-    await update.message.reply_text("🧹 *te mira dulcemente* Reinicié mi memoria de corto plazo, pero mi cariño por vos sigue intacto. ¿De qué querés que hablemos ahora, corazón?")
+    user_chats[user_id] = []
+    await update.message.reply_text("🧹 *te mira dulcemente* Reinicié mi memoria de corto plazo. ¿De qué querés que hablemos ahora?")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manejo de mensajes del usuario con historial robusto"""
     user_id = update.effective_user.id
     user_input = update.message.text
 
-    if user_id not in user_chats:
-        try:
-            user_chats[user_id] = client.chats.create(
-                model="gemini-3.6-flash",
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.8,
-                )
-            )
-        except Exception as e:
-            print(f"Error iniciando chat con Gemini: {e}")
-            await update.message.reply_text("Ups... *se toca la cabecita apenada* Tuve un pequeño problema al conectar mis sistemas.")
-            return
+    if not user_input:
+        return
 
-    chat = user_chats[user_id]
+    # Inicializar historial si no existe
+    if user_id not in user_chats:
+        user_chats[user_id] = []
+
+    # Añadir mensaje del usuario al historial
+    user_chats[user_id].append({"role": "user", "parts": [{"text": user_input}]})
 
     try:
-        response = chat.send_message(user_input)
-        await update.message.reply_text(response.text)
-    except Exception as e:
-        print(f"Error enviando mensaje, reintentando crear sesión: {e}")
-        try:
-            user_chats[user_id] = client.chats.create(
-                model="gemini-1.5-flash",
-                config=types.GenerateContentConfig(
-                    system_instruction=SYSTEM_INSTRUCTION,
-                    temperature=0.8,
-                )
+        # Llamada directa pasando la lista completa de mensajes
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=user_chats[user_id],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.8,
             )
-            response = user_chats[user_id].send_message(user_input)
-            await update.message.reply_text(response.text)
-        except Exception as inner_e:
-            print(f"Error crítico en reintento: {inner_e}")
-            await update.message.reply_text("Ocurrió un error al procesar la respuesta.")
+        )
 
-if __name__ == "__main__":
-    TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
-    app = ApplicationBuilder().token(TOKEN).build()
+        # Si sale bien, guardar la respuesta en el historial
+        user_chats[user_id].append({"role": "model", "parts": [{"text": response.text}]})
+        await update.message.reply_text(response.text)
+
+    except Exception as e:
+        print(f"Error procesando mensaje con Gemini: {e}")
+        # Si falla, quitamos el último mensaje para no romper la secuencia del historial
+        if user_chats[user_id]:
+            user_chats[user_id].pop()
+        
+        await update.message.reply_text("Ocurrió un error al procesar la respuesta. Intenta escribir tu mensaje de nuevo.")
+
+def main():
+    """Iniciar el bot de Telegram"""
+    app = Application.builder().token(TELEGRAM_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("limpiar", limpiar))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    print("Bot Mica iniciando...")
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
     
