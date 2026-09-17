@@ -57,9 +57,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_chats[user_id].append({"role": "user", "parts": [{"text": user_input}]})
 
     try:
-        # Llamada directa pasando la lista completa de mensajes
+        # Usamos gemini-1.5-flash para asegurar compatibilidad
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=user_chats[user_id],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
