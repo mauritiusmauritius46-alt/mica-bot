@@ -71,7 +71,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = client.models.generate_content(
-            model="gemini-3.6-flash",
+            model="gemini-1.5-flash",
             contents=user_chats[user_id],
             config=types.GenerateContentConfig(
                 system_instruction=SYSTEM_INSTRUCTION,
